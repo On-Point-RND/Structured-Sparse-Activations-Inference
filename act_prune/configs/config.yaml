@@ -2,8 +2,8 @@ env:
   SEED: 42
   CUDA_DEVICE_ORDER: "PCI_BUS_ID" 
   OMP_NUM_THREADS: "4"
-  CUDA_VISIBLE_DEVICES: "0"
-  TRANSFORMERS_CACHE: /home/data/hf_cache/
+  CUDA_VISIBLE_DEVICES: "1"  # set device number here, the rest is forced to be "cuda:0"
+  TRANSFORMERS_CACHE: /home/dev/public-datasets/e.shvetsov/hugging_models #/home/data/hf_cache/
 
 paths:
   data_dir: "data/"
@@ -12,12 +12,12 @@ paths:
   results_dir: "artifacts/results/"
 
 model:
-  path: "/home/LLM/weights/Llama-2-7b-hf"
+  path: "/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf" #"/home/LLM/weights/Llama-2-7b-hf"
   seqlen: 2048
 
 benchmarks:
   ppl_wikitext2:
-    run_ppl: True
+    run_ppl: False
   
   harness:
     run_lm_eval: True
@@ -31,5 +31,5 @@ pruning:
   # sparisity_ratio: null #for unstructured pruning
   prune_n: 2
   prune_m: 4
-  module: layers  #layers mlp_blocks attn_blocks
+  module: mlp_blocks #layers  #layers mlp_blocks attn_blocks
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]

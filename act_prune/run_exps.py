@@ -2,7 +2,6 @@ import os
 import logging
 import warnings
 import yaml
-import argparse
 from utils.basic import seed_everything, load_config 
 from act_prune_runner import ActPruneRunner
 
@@ -15,14 +14,9 @@ warnings.filterwarnings("ignore")
 def main() -> None:
     config_dir = "./configs"
     base_config_path = os.path.join(config_dir, "config.yaml")
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--base_config_path', type=str, help='Path to config file')
-    # args = parser.parse_args()
-    # base_config_path = os.path.abspath(args.base_config_path)
-    # config_dir = os.path.dirname(base_config_path)
     config = load_config(base_config_path, config_dir)
+    os.environ["CUDA_VISIBLE_DEVICES"] = config['env']["CUDA_VISIBLE_DEVICES"]
     logging.info("Configuration:\n%s", yaml.dump(config))
-
     seed_everything(config["env"]["SEED"])
     logging.info(f"Fixing seed: {config['env']['SEED']}")
     runner = ActPruneRunner(config)

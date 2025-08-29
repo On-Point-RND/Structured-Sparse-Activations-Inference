@@ -1,7 +1,4 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, set_seed
-import os
-
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 def get_model(model_path, seqlen):
 
@@ -10,7 +7,6 @@ def get_model(model_path, seqlen):
         trust_remote_code = True,
         torch_dtype='auto',
         device_map = 'cuda:0',
-        # attn_implementation = 'eager'
     )
     model.seqlen = seqlen
 

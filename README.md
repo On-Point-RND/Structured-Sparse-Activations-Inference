@@ -1,5 +1,5 @@
 # LLM_activation_pruning
-Code for pruning of input activations to speed up of LLMs
+Code for pruning of input activations to speed up of LLMs.
 
 ## Environment
 To set up the environment, use the Docker container for PyTorch 2.6.0 with CUDA 12.4. 
@@ -18,5 +18,10 @@ All parameters for the experiments are contained in the configuration file locat
 To conduct an experiment, simply run the code from the directory `./act_prune`:
 
 ```
-python main.py
+python run_exps.py
 ```
+
+## Brief pipeline description
+
+The main evaluation procedure (for most of the approaches): <br> 
+We develope some sparse layer, and substitute them for pre-loaded models before validation

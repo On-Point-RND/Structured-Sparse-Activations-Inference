@@ -1,11 +1,9 @@
-import logging
 import os
 import torch
 from abc import ABC, abstractmethod
-from typing import Tuple
 
-from utils.modelutils import get_model
-from utils.datautils import get_wikitext2
+from utils.loadmodel import get_model
+from utils.getwiki import get_wikitext2
 
 import lm_eval
 os.environ["HF_ALLOW_CODE_EVAL"] = "1"
@@ -98,7 +96,7 @@ class BaseRunner(ABC):
         model = lm_eval.models.huggingface.HFLM(pretrained=self.model)
         results = lm_eval.simple_evaluate(
             model=model,
-            tasks=config["tasks"],  # Replace with desired task(s)
+            tasks=config["tasks"],  
             num_fewshot=config["num_fewshot"],
             batch_size=config["batch_size"],
             apply_chat_template=config["apply_chat_template"],
