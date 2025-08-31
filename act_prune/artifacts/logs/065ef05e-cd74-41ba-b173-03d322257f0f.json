@@ -1,0 +1,98 @@
+{
+  "config": {
+    "env": {
+      "SEED": 42,
+      "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+      "OMP_NUM_THREADS": "4",
+      "CUDA_VISIBLE_DEVICES": "1",
+      "TRANSFORMERS_CACHE": "/home/dev/public-datasets/e.shvetsov/hugging_models"
+    },
+    "paths": {
+      "data_dir": "data/",
+      "log_dir": "artifacts/logs/",
+      "checkpoint_dir": "artifacts/checkpoints/",
+      "results_dir": "artifacts/results/"
+    },
+    "model": {
+      "path": "/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf",
+      "seqlen": 2048
+    },
+    "benchmarks": {
+      "ppl_wikitext2": {
+        "run_ppl": false,
+        "batch_size": 64
+      },
+      "harness": {
+        "run_lm_eval": true,
+        "tasks": [
+          "arc_easy",
+          "piqa",
+          "winogrande"
+        ],
+        "num_fewshot": 0,
+        "batch_size": 512,
+        "apply_chat_template": false
+      }
+    },
+    "pruning": {
+      "sparsity_type": "semi-structured_act_magnitude",
+      "transformation_type": "variance",
+      "additional_transformation": null,
+      "prune_n": 2,
+      "prune_m": 4,
+      "module": "layers",
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "finetuning": {
+      "type": "global",
+      "output_dir": "/home/LLM_activation_pruning/act_prune/artifacts/models/llama2_7b_wiki",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config_name": "wikitext-2-raw-v1",
+      "seed": 11,
+      "max_seq_length": 2048,
+      "preprocessing_num_workers": 8,
+      "trust_remote_code": true,
+      "num_train_epochs": 1,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.0,
+      "lr_scheduler_type": "linear",
+      "warmup_ratio": 0.03,
+      "per_device_train_batch_size": 1,
+      "per_device_eval_batch_size": 1,
+      "gradient_accumulation_steps": 16,
+      "gradient_checkpointing": false,
+      "save_strategy": "steps",
+      "save_steps": 200,
+      "report_to": null
+    }
+  },
+  "lm_eval": {
+    "arc_easy": {
+      "alias": "arc_easy",
+      "acc,none": 0.6679292929292929,
+      "acc_stderr,none": 0.009663817543072701,
+      "acc_norm,none": 0.6111111111111112,
+      "acc_norm_stderr,none": 0.010003248335313764
+    },
+    "piqa": {
+      "alias": "piqa",
+      "acc,none": 0.7219804134929271,
+      "acc_stderr,none": 0.010453117358332813,
+      "acc_norm,none": 0.7334058759521219,
+      "acc_norm_stderr,none": 0.010316749863541367
+    },
+    "winogrande": {
+      "alias": "winogrande",
+      "acc,none": 0.590370955011839,
+      "acc_stderr,none": 0.013821049109655488
+    }
+  }
+}

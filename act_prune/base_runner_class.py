@@ -1,10 +1,13 @@
+import logging
 import os
 import torch
 from abc import ABC, abstractmethod
+from typing import Tuple
 
 from utils.loadmodel import get_model
 from utils.getwiki import get_wikitext2
 
+import uuid
 import lm_eval
 os.environ["HF_ALLOW_CODE_EVAL"] = "1"
 
@@ -13,7 +16,10 @@ class BaseRunner(ABC):
         self.config = config
         self.model = None
         self.tokenizer = None
-    
+        self.run_id = uuid.uuid4()
+        logging.info(f"Run ID: {self.run_id}")
+
+
     def load_model_tokenizer(self):
         path_to_model = self.config["model"]["path"]
         seqlen = self.config["model"]["seqlen"]
@@ -32,7 +38,7 @@ class BaseRunner(ABC):
     def replace_mlp_blocks(self):
         """Insert into model modified mlp blocks with original weights """
         raise NotImplementedError
-    
+
     @torch.no_grad()
     def measure_ppl(self, testenc, bs=1):
         """Measure quality of sparsified model"""
@@ -90,13 +96,13 @@ class BaseRunner(ABC):
         torch.cuda.empty_cache()
 
         return ppl.item(), start.elapsed_time(end) / 1000
-    
+
     def run_lm_eval(self):
         config = self.config["benchmarks"]["harness"]
         model = lm_eval.models.huggingface.HFLM(pretrained=self.model)
         results = lm_eval.simple_evaluate(
             model=model,
-            tasks=config["tasks"],  
+            tasks=config["tasks"],  # Replace with desired task(s)
             num_fewshot=config["num_fewshot"],
             batch_size=config["batch_size"],
             apply_chat_template=config["apply_chat_template"],
