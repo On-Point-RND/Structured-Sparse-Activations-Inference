@@ -86,7 +86,7 @@ class Linear_act_sp(nn.Module):
         x_sp = x * mask
         return x_sp
 
-    def semi_structural_L_pruner(self, x, prune_n=2, prune_m=4):
+    def semi_structural_clact_pruner(self, x, prune_n=2, prune_m=4):
         """
         If we remove X_{it} from the input activation X:
             L_{cos_{ti}} = |X_it| * sqrt(sum_p X_pt^2)  / sqrt(sum_j X_ij^2)
@@ -119,6 +119,61 @@ class Linear_act_sp(nn.Module):
         mask = mask_1d.view(orig_shape)
         x_sp = x * mask
         return x_sp
+
+    
+    def semi_structural_amber_pruner(self, x, prune_n=2, prune_m=16):
+        
+        weights = self.weight
+        x_flat = x.view(-1, weights.shape[1])  # [N, in_features]
+    
+        # Outlier Removal
+        flat_weights = weights.view(-1)
+        if flat_weights.numel() > 100000:
+            sample_size = min(50000, flat_weights.numel())
+            indices = torch.randint(0, flat_weights.numel(), (sample_size,), device=flat_weights.device)
+            sample = flat_weights[indices].float()
+        else:
+            sample = flat_weights.float()
+    
+        q0_005 = torch.quantile(sample, 0.005)
+        q0_995 = torch.quantile(sample, 0.995)
+        
+        mask_weights = (weights >= q0_005) & (weights <= q0_995)
+        if not mask_weights.any():
+            mask_weights = torch.ones_like(weights, dtype=torch.bool)
+    
+        filtered_weights = weights[mask_weights]
+    
+        # Normalization
+        mean_w = filtered_weights.mean()
+        std_w = filtered_weights.std(unbiased=False)
+        std_w = torch.clamp(std_w, min=1e-8)
+        normalized_weights = (weights - mean_w) / std_w
+    
+        # Channel-wise Scoring
+        channel_l2_norms = torch.norm(normalized_weights, dim=0)
+    
+        # Min norm among all channels
+        min_channel_norm = channel_l2_norms.min()
+        min_channel_norm = torch.clamp(min_channel_norm, min=1e-8)
+    
+        # f(Ŵ_{:,j}) = ||Ŵ_{:,j}||_2 / min_k ||Ŵ_{:,k}||_2
+        f_values = channel_l2_norms / min_channel_norm  # [in_features]
+    
+        # S_ij = |X_ij| * f(Ŵ_{:,j})
+        scores = torch.abs(x_flat) * f_values.unsqueeze(0)  # [N, in_features]
+    
+        scores_2d = scores.view(-1, prune_m)  # [N*in_features/prune_m, prune_m]
+        _, topk_indices = torch.topk(scores_2d, k=prune_n, dim=1, largest=True, sorted=False)
+    
+        mask_2d = torch.zeros_like(scores_2d, dtype=torch.bool)
+        mask_2d.scatter_(1, topk_indices, True)
+        mask_flat = mask_2d.view_as(x_flat)  # [N, in_features]
+    
+        x_pruned = x_flat * mask_flat
+    
+        return x_pruned.view_as(x)
+        
 
     def variance_factor(self, x, x_sp):
         var_ratio = torch.var(x, dim=1, keepdim=True) / torch.clamp(torch.var(x_sp, dim=1, keepdim=True), min=1e-9)
@@ -231,16 +286,13 @@ class Linear_act_sp(nn.Module):
             out = self.prune_with_additional_transformation(x_flat, pruner)
 
         # L-based pruning from shirin-shift-transform
-        elif self.sparsity_type == "semi_structural_L_pruner":
-            x_sp = self.semi_structural_L_pruner(x_flat, self.prune_n, self.prune_m)
+        elif self.sparsity_type == "semi_structural_clact":
+            x_sp = self.semi_structural_clact_pruner(x_flat, self.prune_n, self.prune_m)
             out = x_sp @ self.weight.t()
 
-        # Shift-only variant from shirin
-        elif self.sparsity_type == "semi-structured_shift":
-            eta = self.bias_term(x_flat)
-            x_shifted = x_flat - eta
-            x_sp = self.semi_structural_magnitude_pruner(x_shifted, self.prune_n, self.prune_m)
-            out = (x_sp + eta) @ self.weight.t()
+        elif self.sparsity_type == "semi_structural_amber":
+            pruner = lambda z: self.semi_structural_amber_pruner(z, self.prune_n, self.prune_m)
+            out = pruner(x_flat) @ self.weight.t()
 
         else:
             raise ValueError(f"Unknown sparsity_type: {self.sparsity_type}")
