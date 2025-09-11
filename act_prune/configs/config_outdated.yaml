@@ -12,7 +12,7 @@ paths:
   results_dir: "artifacts/results/"
 
 model:
-  path: /home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it  #/home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it #/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct # #/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct #/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct # #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf" # #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf"  #/home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it  # #"/home/LLM/weights/Llama-2-7b-hf"
+  path: /home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct  #/home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it #/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct # #/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct #/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct # #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf" # #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf"  #/home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it  # #"/home/LLM/weights/Llama-2-7b-hf"
   seqlen: 512
 
 benchmarks:

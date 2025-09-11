@@ -174,6 +174,74 @@ class Linear_act_sp(nn.Module):
     
         return x_pruned.view_as(x)
         
+    def unstructured_clact_pruner(self, x, sparsity_ratio):
+        """
+        Unstructured version of C-Lact pruner based on importance metric:
+        L_metric = |X_it| * sqrt(∑_p X_pt²) / sqrt(∑_j X_ij²)
+        """
+        abs_x = torch.abs(x)
+        row_denominator = torch.sqrt(torch.sum(x**2, dim=1, keepdim=True))  # per-row norm
+        col_norms = torch.sqrt(torch.sum(x**2, dim=0, keepdim=True))        # per-column norm
+        
+        L_metric = abs_x / (row_denominator + 1e-8) * col_norms
+
+        # Calculate number of elements to keep
+        num_elements_to_keep = int(x.numel() * (1.0 - sparsity_ratio))
+        
+        # Flatten and select top-k elements globally
+        _, idx = torch.topk(L_metric.view(-1), num_elements_to_keep, sorted=False)
+        mask_flat = torch.zeros_like(x.view(-1), dtype=torch.bool)
+        mask_flat[idx] = True
+        mask = mask_flat.view_as(x)
+        
+        return x * mask
+
+    def unstructured_amber_pruner(self, x, sparsity_ratio):
+        """
+        Unstructured version of Amber pruner using weight-aware scoring
+        """
+        weights = self.weight
+        x_flat = x.view(-1, weights.shape[1])
+        
+        # Weight normalization with outlier removal
+        flat_weights = weights.view(-1)
+        if flat_weights.numel() > 100000:
+            sample_size = min(50000, flat_weights.numel())
+            indices = torch.randint(0, flat_weights.numel(), (sample_size,), device=flat_weights.device)
+            sample = flat_weights[indices].float()
+        else:
+            sample = flat_weights.float()
+        
+        q0_005 = torch.quantile(sample, 0.005)
+        q0_995 = torch.quantile(sample, 0.995)
+        
+        mask_weights = (weights >= q0_005) & (weights <= q0_995)
+        if not mask_weights.any():
+            mask_weights = torch.ones_like(weights, dtype=torch.bool)
+        
+        filtered_weights = weights[mask_weights]
+        mean_w = filtered_weights.mean()
+        std_w = filtered_weights.std(unbiased=False)
+        std_w = torch.clamp(std_w, min=1e-8)
+        normalized_weights = (weights - mean_w) / std_w
+
+        # Compute channel importance scores
+        channel_l2_norms = torch.norm(normalized_weights, dim=0)
+        min_channel_norm = torch.clamp(channel_l2_norms.min(), min=1e-8)
+        f_values = channel_l2_norms / min_channel_norm
+
+        # Compute element scores
+        scores = torch.abs(x_flat) * f_values.unsqueeze(0)
+        
+        # Global top-k selection
+        num_elements_to_keep = int(scores.numel() * (1.0 - sparsity_ratio))
+        _, idx = torch.topk(scores.view(-1), num_elements_to_keep, sorted=False)
+        mask_flat = torch.zeros_like(scores.view(-1), dtype=torch.bool)
+        mask_flat[idx] = True
+        mask = mask_flat.view_as(x)
+        
+        return x * mask
+    
 
     def variance_factor(self, x, x_sp):
         var_ratio = torch.var(x, dim=1, keepdim=True) / torch.clamp(torch.var(x_sp, dim=1, keepdim=True), min=1e-9)
@@ -283,6 +351,14 @@ class Linear_act_sp(nn.Module):
         # Unstructured pruning
         elif self.sparsity_type == "unstructured_act_magnitude":
             pruner = lambda z: self.unstructured_magnitude_pruner(z, self.sparsity_ratio)
+            out = self.prune_with_additional_transformation(x_flat, pruner)
+
+        elif self.sparsity_type == "unstructured_clact_pruner":
+            pruner = lambda z: self.unstructured_clact_pruner(z, self.sparsity_ratio)
+            out = self.prune_with_additional_transformation(x_flat, pruner)
+
+        elif self.sparsity_type == "unstructured_amber_pruner":
+            pruner = lambda z: self.unstructured_amber_pruner(z, self.sparsity_ratio)
             out = self.prune_with_additional_transformation(x_flat, pruner)
 
         # L-based pruning from shirin-shift-transform

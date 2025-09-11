@@ -1,5 +1,7 @@
+import os
 import json
 import logging
+
 from pathlib import Path
 from base_runner_class import BaseRunner
 from modelling import layer_swap
@@ -58,13 +60,15 @@ class ActPruneRunner(BaseRunner):
         """Execute the pruning pipeline."""
         self.load_model_tokenizer()
 
-        log_dir = Path(self.config["paths"]["log_dir"])
+        model = self.config["model"]["path"].split('/')[-1]
+        sparsity_type = self.config["pruning"]["sparsity_type"]
+        log_dir = Path(os.path.join(self.config["paths"]["log_dir"],model,sparsity_type))
         log_dir.mkdir(parents=True, exist_ok=True)
         res_file = log_dir / f"{self.run_id}.json"
 
         res = {}
         res["config"] = self.config
-        sparsity_type = self.config["pruning"]["sparsity_type"]
+
         if sparsity_type == "None":
             logging.info("No sparsity applied, using original model.")
         else:
