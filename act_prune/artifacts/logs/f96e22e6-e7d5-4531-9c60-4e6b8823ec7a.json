@@ -14,7 +14,7 @@
       "results_dir": "artifacts/results/"
     },
     "model": {
-      "path": "/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct",
+      "path": "/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct",
       "seqlen": 2048
     },
     "benchmarks": {
@@ -25,10 +25,12 @@
       "harness": {
         "run_lm_eval": true,
         "tasks": [
+          "arc_challenge",
           "boolq",
           "arc_easy",
           "piqa",
-          "winogrande"
+          "winogrande",
+          "hellaswag"
         ],
         "num_fewshot": 0,
         "batch_size": 512,
@@ -36,16 +38,13 @@
       }
     },
     "pruning": {
-      "sparsity_type": "semi-structured_act_magnitude",
+      "sparsity_type": "semi_structural_L_pruner",
       "transformation_type": "shift",
-      "additional_transformation": null,
+      "additional_transformation": "none",
       "prune_n": 2,
       "prune_m": 4,
       "module": "layers",
       "target_modules": [
-        "q_proj",
-        "k_proj",
-        "v_proj",
         "o_proj",
         "gate_proj",
         "up_proj",
@@ -76,29 +75,43 @@
     }
   },
   "lm_eval": {
+    "arc_challenge": {
+      "alias": "arc_challenge",
+      "acc,none": 0.4735494880546075,
+      "acc_stderr,none": 0.014590931358120167,
+      "acc_norm,none": 0.4854948805460751,
+      "acc_norm_stderr,none": 0.014605241081370053
+    },
     "arc_easy": {
       "alias": "arc_easy",
-      "acc,none": 0.6877104377104377,
-      "acc_stderr,none": 0.009509325983631455,
-      "acc_norm,none": 0.6447811447811448,
-      "acc_norm_stderr,none": 0.009820245899287119
+      "acc,none": 0.7234848484848485,
+      "acc_stderr,none": 0.00917788010146828,
+      "acc_norm,none": 0.7070707070707071,
+      "acc_norm_stderr,none": 0.009338583737393609
     },
     "boolq": {
       "alias": "boolq",
-      "acc,none": 0.7290519877675841,
-      "acc_stderr,none": 0.007773467255881215
+      "acc,none": 0.8425076452599388,
+      "acc_stderr,none": 0.006371023443537496
+    },
+    "hellaswag": {
+      "alias": "hellaswag",
+      "acc,none": 0.5150368452499502,
+      "acc_stderr,none": 0.004987524454849717,
+      "acc_norm,none": 0.686516630153356,
+      "acc_norm_stderr,none": 0.004629608863272261
     },
     "piqa": {
       "alias": "piqa",
-      "acc,none": 0.7225244831338411,
-      "acc_stderr,none": 0.01044681828103995,
-      "acc_norm,none": 0.7263329706202394,
-      "acc_norm_stderr,none": 0.010402184206229216
+      "acc,none": 0.6969532100108814,
+      "acc_stderr,none": 0.010722648689531513,
+      "acc_norm,none": 0.7116430903155604,
+      "acc_norm_stderr,none": 0.010569190399220656
     },
     "winogrande": {
       "alias": "winogrande",
-      "acc,none": 0.6085240726124704,
-      "acc_stderr,none": 0.013717487071290852
+      "acc,none": 0.6385161799526441,
+      "acc_stderr,none": 0.013502479670791278
     }
   }
 }

@@ -75,7 +75,8 @@ def swap_linear_inplace(root_module,
                 if sparsity_type in ("semi-structured_act_magnitude",
                                      "unstructured_act_magnitude",
                                      "semi-structured_act_magnitude_var_weight", 
-                                     "semi-structured_act_grad_acc"):
+                                     "semi-structured_act_grad_acc",
+                                     "semi_structural_L_pruner"):
                     
                     sparse_linear = Linear_act_sp.from_original(module, **kvargs)
                 elif sparsity_type in ("semi-structured_weight_magnitude", "unstructured_weight_magnitude"):

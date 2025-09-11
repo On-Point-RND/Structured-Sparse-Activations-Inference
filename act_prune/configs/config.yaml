@@ -12,35 +12,35 @@ paths:
   results_dir: "artifacts/results/"
 
 model:
-  path:  /home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct #/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf" # #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf"  #/home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it  # #"/home/LLM/weights/Llama-2-7b-hf"
-  seqlen: 2048
+  path: /home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it  #/home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it #/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct # #/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct #/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct # #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf" # #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-2-7b-hf"  #/home/dev/public-datasets/e.shvetsov/hugging_models/gemma-3-4b-it  # #"/home/LLM/weights/Llama-2-7b-hf"
+  seqlen: 512
 
 benchmarks:
   ppl_wikitext2:
-    run_ppl: False
-    batch_size: 64
+    run_ppl: True
+    batch_size: 8
   
   harness:
-    run_lm_eval: True
-    tasks: [arc_challenge, boolq, arc_easy, arc_challenge, piqa, winogrande, hellswag]  #[boolq, arc_easy, piqa, winogrande] #[arc_easy, piqa, winogrande] 
+    run_lm_eval: False
+    tasks: [arc_challenge, boolq, arc_easy, piqa, winogrande, hellaswag]  #[boolq, arc_easy, piqa, winogrande] #[arc_easy, piqa, winogrande] 
     num_fewshot: 0
     batch_size: 512
     apply_chat_template: False # for instructive models run with True and False
 
 
 pruning:
-    sparsity_type: semi-structured_weight_magnitude # unstructured_act_magnitude, unstructured_weight_magnitude, semi-structured_act_magnitude, semi_structural_L_pruner
-    transformation_type: shift #none  # none learnable
+    sparsity_type: semi-structured_act_magnitude #semi_structural_L_pruner # unstructured_act_magnitude, unstructured_weight_magnitude, semi-structured_act_magnitude, semi_structural_L_pruner
+    transformation_type: variance #none  # none learnable
     # sparsity_ratio: 0.2 # for unstructured pruning
-    additional_transformation: null
+    additional_transformation: none
     prune_n: 2
     prune_m: 4
     module: layers #layers mlp_blocks attn_blocks
     target_modules:
         [
-            "q_proj",
-            "k_proj",
-            "v_proj",
+            # "q_proj",
+            # "k_proj",
+            # "v_proj",
             "o_proj",
             "gate_proj",
             "up_proj",

@@ -15,7 +15,10 @@ class ActPruneRunner(BaseRunner):
     def replace_linear_layers(self):
         """Insert into model modified linear layers with original weights """
         logging.info("Replace Linear layers...")
-        layer_swap.swap_linear_inplace(self.model.model,
+        
+        model = getattr(self.model,'model',self.model)
+
+        layer_swap.swap_linear_inplace(model,
                                        self.config["pruning"]["sparsity_type"],
                                        self.config["pruning"]["transformation_type"],
                                        self.config["pruning"].get("sparsity_ratio", None),

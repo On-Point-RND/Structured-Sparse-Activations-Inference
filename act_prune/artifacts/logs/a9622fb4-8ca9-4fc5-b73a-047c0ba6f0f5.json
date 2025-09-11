@@ -14,21 +14,23 @@
       "results_dir": "artifacts/results/"
     },
     "model": {
-      "path": "/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct",
-      "seqlen": 2048
+      "path": "/home/dev/public-datasets/e.shvetsov/hugging_models/Qwen2.5-7B-Instruct",
+      "seqlen": 512
     },
     "benchmarks": {
       "ppl_wikitext2": {
-        "run_ppl": false,
-        "batch_size": 64
+        "run_ppl": true,
+        "batch_size": 8
       },
       "harness": {
-        "run_lm_eval": true,
+        "run_lm_eval": false,
         "tasks": [
+          "arc_challenge",
           "boolq",
           "arc_easy",
           "piqa",
-          "winogrande"
+          "winogrande",
+          "hellaswag"
         ],
         "num_fewshot": 0,
         "batch_size": 512,
@@ -37,15 +39,12 @@
     },
     "pruning": {
       "sparsity_type": "semi-structured_act_magnitude",
-      "transformation_type": "shift",
-      "additional_transformation": null,
-      "prune_n": 2,
-      "prune_m": 4,
+      "transformation_type": "variance",
+      "additional_transformation": "none",
+      "prune_n": 8,
+      "prune_m": 16,
       "module": "layers",
       "target_modules": [
-        "q_proj",
-        "k_proj",
-        "v_proj",
         "o_proj",
         "gate_proj",
         "up_proj",
@@ -75,30 +74,6 @@
       "report_to": null
     }
   },
-  "lm_eval": {
-    "arc_easy": {
-      "alias": "arc_easy",
-      "acc,none": 0.6877104377104377,
-      "acc_stderr,none": 0.009509325983631455,
-      "acc_norm,none": 0.6447811447811448,
-      "acc_norm_stderr,none": 0.009820245899287119
-    },
-    "boolq": {
-      "alias": "boolq",
-      "acc,none": 0.7290519877675841,
-      "acc_stderr,none": 0.007773467255881215
-    },
-    "piqa": {
-      "alias": "piqa",
-      "acc,none": 0.7225244831338411,
-      "acc_stderr,none": 0.01044681828103995,
-      "acc_norm,none": 0.7263329706202394,
-      "acc_norm_stderr,none": 0.010402184206229216
-    },
-    "winogrande": {
-      "alias": "winogrande",
-      "acc,none": 0.6085240726124704,
-      "acc_stderr,none": 0.013717487071290852
-    }
-  }
+  "wikitext ppl": 11.914304733276367,
+  "wikitext time": 728.251125
 }
