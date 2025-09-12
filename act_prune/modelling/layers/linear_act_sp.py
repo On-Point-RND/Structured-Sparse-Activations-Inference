@@ -371,7 +371,7 @@ class Linear_act_sp(nn.Module):
 
         elif self.transformation_type == "shift":
             x_sp = self.shift_transformation(x_flat, pruner, self.bias_term(x_flat)) 
-            out = x_sp @ self.weight.t()@ self.weight.t()
+            out = x_sp @ self.weight.t()
         
         elif self.transformation_type == "learnable":
             x_sp = self.learnable_transformation(x_flat, pruner)
