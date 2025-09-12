@@ -6,7 +6,7 @@ class EnvConfig:
     SEED: int = 42
     CUDA_DEVICE_ORDER: str = "PCI_BUS_ID"
     OMP_NUM_THREADS: str = "4"
-    CUDA_VISIBLE_DEVICES: str  = "1"
+    CUDA_VISIBLE_DEVICES: str  = "4"
     TRANSFORMERS_CACHE: str = "/home/dev/public-datasets/e.shvetsov/hugging_models"
 
 @dataclass
@@ -18,7 +18,7 @@ class PathsConfig:
 
 @dataclass
 class ModelConfig:
-    path: str = "/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct"
+    path: str = "/home/data/Llama-3.1-8B-Instruct" #"/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct"
     seqlen: int = 512
 
 @dataclass
