@@ -1,0 +1,121 @@
+{
+  "config": {
+    "env": {
+      "SEED": 42,
+      "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+      "OMP_NUM_THREADS": "4",
+      "CUDA_VISIBLE_DEVICES": "4",
+      "TRANSFORMERS_CACHE": "/home/dev/public-datasets/e.shvetsov/hugging_models"
+    },
+    "paths": {
+      "data_dir": "data/",
+      "log_dir": "artifacts/logs/",
+      "checkpoint_dir": "artifacts/checkpoints/",
+      "results_dir": "artifacts/results/"
+    },
+    "model": {
+      "path": "/home/data/Llama-3.1-8B-Instruct",
+      "seqlen": 512
+    },
+    "benchmarks": {
+      "ppl_wikitext2": {
+        "run_ppl": false,
+        "batch_size": 8
+      },
+      "harness": {
+        "run_lm_eval": true,
+        "tasks": [
+          "arc_challenge",
+          "boolq",
+          "arc_easy",
+          "piqa",
+          "winogrande",
+          "hellaswag"
+        ],
+        "num_fewshot": 0,
+        "batch_size": 512,
+        "apply_chat_template": false
+      }
+    },
+    "pruning": {
+      "sparsity_type": "unstructured_act_magnitude",
+      "transformation_type": "shift",
+      "sparsity_ratio": 0.7,
+      "additional_transformation": "none",
+      "prune_n": 2,
+      "prune_m": 4,
+      "module": "layers",
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "finetuning": {
+      "type": "global",
+      "output_dir": "/home/LLM_activation_pruning/act_prune/artifacts/models/llama2_7b_wiki",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config_name": "wikitext-2-raw-v1",
+      "seed": 11,
+      "max_seq_length": 2048,
+      "preprocessing_num_workers": 8,
+      "trust_remote_code": true,
+      "num_train_epochs": 1,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.0,
+      "lr_scheduler_type": "linear",
+      "warmup_ratio": 0.03,
+      "per_device_train_batch_size": 1,
+      "per_device_eval_batch_size": 1,
+      "gradient_accumulation_steps": 16,
+      "gradient_checkpointing": false,
+      "save_strategy": "steps",
+      "save_steps": 200,
+      "report_to": null
+    }
+  },
+  "lm_eval": {
+    "arc_challenge": {
+      "alias": "arc_challenge",
+      "acc,none": 0.24573378839590443,
+      "acc_stderr,none": 0.01258103345373011,
+      "acc_norm,none": 0.2764505119453925,
+      "acc_norm_stderr,none": 0.013069662474252427
+    },
+    "arc_easy": {
+      "alias": "arc_easy",
+      "acc,none": 0.5580808080808081,
+      "acc_stderr,none": 0.010190328123071777,
+      "acc_norm,none": 0.523989898989899,
+      "acc_norm_stderr,none": 0.010247967392742686
+    },
+    "boolq": {
+      "alias": "boolq",
+      "acc,none": 0.6311926605504588,
+      "acc_stderr,none": 0.008438656079759061
+    },
+    "hellaswag": {
+      "alias": "hellaswag",
+      "acc,none": 0.33409679346743676,
+      "acc_stderr,none": 0.004707097816047553,
+      "acc_norm,none": 0.4214299940250946,
+      "acc_norm_stderr,none": 0.004927790036726635
+    },
+    "piqa": {
+      "alias": "piqa",
+      "acc,none": 0.6474428726877041,
+      "acc_stderr,none": 0.01114707436501046,
+      "acc_norm,none": 0.6566920565832427,
+      "acc_norm_stderr,none": 0.011078175207348832
+    },
+    "winogrande": {
+      "alias": "winogrande",
+      "acc,none": 0.5477505919494869,
+      "acc_stderr,none": 0.013988256216606022
+    }
+  }
+}
