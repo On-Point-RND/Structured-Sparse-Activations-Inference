@@ -31,7 +31,7 @@ benchmarks:
 pruning:
     sparsity_type: semi-structured_act_magnitude #semi_structural_L_pruner # unstructured_act_magnitude, unstructured_weight_magnitude, semi-structured_act_magnitude, semi_structural_L_pruner
     transformation_type: variance #none  # none learnable
-    # sparsity_ratio: 0.2 # for unstructured pruning
+    sparsity_ratio: 0.2 # for unstructured pruning
     additional_transformation: none
     prune_n: 2
     prune_m: 4

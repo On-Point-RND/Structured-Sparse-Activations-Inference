@@ -1,0 +1,121 @@
+{
+  "config": {
+    "env": {
+      "SEED": 42,
+      "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+      "OMP_NUM_THREADS": "4",
+      "CUDA_VISIBLE_DEVICES": "1",
+      "TRANSFORMERS_CACHE": "/home/dev/public-datasets/e.shvetsov/hugging_models"
+    },
+    "paths": {
+      "data_dir": "data/",
+      "log_dir": "artifacts/logs/",
+      "checkpoint_dir": "artifacts/checkpoints/",
+      "results_dir": "artifacts/results/"
+    },
+    "model": {
+      "path": "/home/dev/public-datasets/e.shvetsov/hugging_models/Llama-3.1-8B-Instruct",
+      "seqlen": 512
+    },
+    "benchmarks": {
+      "ppl_wikitext2": {
+        "run_ppl": false,
+        "batch_size": 8
+      },
+      "harness": {
+        "run_lm_eval": true,
+        "tasks": [
+          "arc_challenge",
+          "boolq",
+          "arc_easy",
+          "piqa",
+          "winogrande",
+          "hellaswag"
+        ],
+        "num_fewshot": 0,
+        "batch_size": 512,
+        "apply_chat_template": false
+      }
+    },
+    "pruning": {
+      "sparsity_type": "unstructured_act_magnitude",
+      "transformation_type": "none",
+      "sparsity_ratio": 0.5,
+      "additional_transformation": "none",
+      "prune_n": 2,
+      "prune_m": 4,
+      "module": "layers",
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "finetuning": {
+      "type": "global",
+      "output_dir": "/home/LLM_activation_pruning/act_prune/artifacts/models/llama2_7b_wiki",
+      "dataset_name": "Salesforce/wikitext",
+      "dataset_config_name": "wikitext-2-raw-v1",
+      "seed": 11,
+      "max_seq_length": 2048,
+      "preprocessing_num_workers": 8,
+      "trust_remote_code": true,
+      "num_train_epochs": 1,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.0,
+      "lr_scheduler_type": "linear",
+      "warmup_ratio": 0.03,
+      "per_device_train_batch_size": 1,
+      "per_device_eval_batch_size": 1,
+      "gradient_accumulation_steps": 16,
+      "gradient_checkpointing": false,
+      "save_strategy": "steps",
+      "save_steps": 200,
+      "report_to": null
+    }
+  },
+  "lm_eval": {
+    "arc_challenge": {
+      "alias": "arc_challenge",
+      "acc,none": 0.46501706484641636,
+      "acc_stderr,none": 0.014575583922019662,
+      "acc_norm,none": 0.5017064846416383,
+      "acc_norm_stderr,none": 0.014611305705056983
+    },
+    "arc_easy": {
+      "alias": "arc_easy",
+      "acc,none": 0.781986531986532,
+      "acc_stderr,none": 0.008472459303145413,
+      "acc_norm,none": 0.76010101010101,
+      "acc_norm_stderr,none": 0.008762298774190587
+    },
+    "boolq": {
+      "alias": "boolq",
+      "acc,none": 0.8198776758409786,
+      "acc_stderr,none": 0.006721262256417072
+    },
+    "hellaswag": {
+      "alias": "hellaswag",
+      "acc,none": 0.5420235012945628,
+      "acc_stderr,none": 0.004972126523031942,
+      "acc_norm,none": 0.7380999800836486,
+      "acc_norm_stderr,none": 0.004387699525854945
+    },
+    "piqa": {
+      "alias": "piqa",
+      "acc,none": 0.7714907508161044,
+      "acc_stderr,none": 0.009796313511829522,
+      "acc_norm,none": 0.7736670293797606,
+      "acc_norm_stderr,none": 0.009763294246879424
+    },
+    "winogrande": {
+      "alias": "winogrande",
+      "acc,none": 0.6858721389108129,
+      "acc_stderr,none": 0.013045416716072568
+    }
+  }
+}

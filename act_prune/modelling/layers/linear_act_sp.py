@@ -321,7 +321,15 @@ class Linear_act_sp(nn.Module):
             out = x @ self.weight.t()
 
         # Semi-structured with transformation logic
-        elif self.sparsity_type in ["semi-structured_act_magnitude", "semi-structured_act_magnitude_var_weight", "semi-structured_act_grad_acc"]:
+        elif self.sparsity_type in ["semi-structured_act_magnitude", 
+                                    "semi-structured_act_magnitude_var_weight", 
+                                    "semi-structured_act_grad_acc",
+                                    "semi_structural_clact",
+                                    "semi_structural_amber",
+                                    "unstructured_act_magnitude",
+                                    "unstructured_clact_pruner",""
+                                    "unstructured_amber_pruner"]:
+            
             if self.sparsity_type == "semi-structured_act_magnitude":
                 pruner = lambda z: self.semi_structural_magnitude_pruner(z, self.prune_n, self.prune_m)
             
@@ -331,47 +339,51 @@ class Linear_act_sp(nn.Module):
             elif self.sparsity_type == "semi-structured_act_magnitude_var_weight":
                 pruner = lambda z: self.semi_structural_magnitude_var_weight_pruner(z, self.prune_n, self.prune_m)
 
-            if self.transformation_type == "variance":
-                x_sp = pruner(x_flat) 
-                out = self.variance_transformation(x_flat, x_sp) @ self.weight.t()
+            # L-based pruning from shirin-shift-transform
+            elif self.sparsity_type == "semi_structural_clact":
+                #x_sp = self.semi_structural_clact_pruner(x_flat, self.prune_n, self.prune_m)
+                pruner = lambda z: self.semi_structural_amber_pruner(z, self.prune_n, self.prune_m)
+                #out = x_sp @ self.weight.t()
 
-            elif self.transformation_type == "shift":
-                out = self.shift_transformation(x_flat, pruner, self.bias_term(x_flat)) @ self.weight.t()
-            
-            elif self.transformation_type == "learnable":
-                x_sp = self.learnable_transformation(x_flat, pruner)
-                out = torch.matmul(x_sp, self.weight.t()) + self.shift
-                # out = self.v * out
-                # x_sp = x_sp.to_dense()
-            elif self.transformation_type == "scaling" or self.additional_transformation == "scaling":
-                out = self.scaling_transformation(x_flat, pruner)
-            else:
-                out = pruner(x_flat) @ self.weight.t()
+            elif self.sparsity_type == "semi_structural_amber":
+                pruner = lambda z: self.semi_structural_amber_pruner(z, self.prune_n, self.prune_m)
+                #out = pruner(x_flat) @ self.weight.t()
+
+              # Unstructured pruning
+            elif self.sparsity_type == "unstructured_act_magnitude":
+                pruner = lambda z: self.unstructured_magnitude_pruner(z, self.sparsity_ratio)
+                #out = self.prune_with_additional_transformation(x_flat, pruner)
+
+            elif self.sparsity_type == "unstructured_clact_pruner":
+                pruner = lambda z: self.unstructured_clact_pruner(z, self.sparsity_ratio)
+                #out = self.prune_with_additional_transformation(x_flat, pruner)
+
+            elif self.sparsity_type == "unstructured_amber_pruner":
+                pruner = lambda z: self.unstructured_amber_pruner(z, self.sparsity_ratio)
+                #out = self.prune_with_additional_transformation(x_flat, pruner)
+
+
+        # Apply transformations
+        if self.transformation_type == "variance":
+            x_sp = pruner(x_flat) 
+            x_transformed = self.variance_transformation(x_flat, x_sp)
+            out = x_transformed  @ self.weight.t()
+
+        elif self.transformation_type == "shift":
+            x_sp = self.shift_transformation(x_flat, pruner, self.bias_term(x_flat)) 
+            out = x_sp @ self.weight.t()@ self.weight.t()
         
-        # Unstructured pruning
-        elif self.sparsity_type == "unstructured_act_magnitude":
-            pruner = lambda z: self.unstructured_magnitude_pruner(z, self.sparsity_ratio)
-            out = self.prune_with_additional_transformation(x_flat, pruner)
-
-        elif self.sparsity_type == "unstructured_clact_pruner":
-            pruner = lambda z: self.unstructured_clact_pruner(z, self.sparsity_ratio)
-            out = self.prune_with_additional_transformation(x_flat, pruner)
-
-        elif self.sparsity_type == "unstructured_amber_pruner":
-            pruner = lambda z: self.unstructured_amber_pruner(z, self.sparsity_ratio)
-            out = self.prune_with_additional_transformation(x_flat, pruner)
-
-        # L-based pruning from shirin-shift-transform
-        elif self.sparsity_type == "semi_structural_clact":
-            x_sp = self.semi_structural_clact_pruner(x_flat, self.prune_n, self.prune_m)
-            out = x_sp @ self.weight.t()
-
-        elif self.sparsity_type == "semi_structural_amber":
-            pruner = lambda z: self.semi_structural_amber_pruner(z, self.prune_n, self.prune_m)
-            out = pruner(x_flat) @ self.weight.t()
-
+        elif self.transformation_type == "learnable":
+            x_sp = self.learnable_transformation(x_flat, pruner)
+            out = torch.matmul(x_sp, self.weight.t()) + self.shift
+            
+        elif self.transformation_type == "scaling" or self.additional_transformation == "scaling":
+            out = self.scaling_transformation(x_flat, pruner)
         else:
-            raise ValueError(f"Unknown sparsity_type: {self.sparsity_type}")
+            out = pruner(x_flat) @ self.weight.t()
+        
+        # else:
+        #     raise ValueError(f"Unknown sparsity_type: {self.sparsity_type}")
 
         return out.view(bs, seq_len, -1)
 
