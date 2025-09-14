@@ -3,7 +3,7 @@ from torch import nn
 
 # from fast_hadamard_transform import hadamard_transform
 
-
+COLLECT_ETA_PRINT_COUNT = 0
 class Linear_act_sp(nn.Module):
     def __init__(
         self,
@@ -17,6 +17,7 @@ class Linear_act_sp(nn.Module):
         prune_m=None,  # if sparsity_type is "semi-structured_act_magnitude"
         name=None,
         additional_transformation=None,
+        eta_buffer_size=100,  
     ):
         super().__init__()
         self.in_features = in_features
@@ -29,6 +30,12 @@ class Linear_act_sp(nn.Module):
         self.register_buffer("weight", None)
         self.name = name
         self.additional_transformation = additional_transformation
+        self.eta_buffer_size = eta_buffer_size
+        self.eta_collection_completed = False
+
+        self.register_buffer("eta_buffer", torch.zeros(eta_buffer_size))
+        self.register_buffer("eta_counter", torch.tensor(0))
+        self.register_buffer("static_eta", torch.tensor(float('nan')))
 
         if sparsity_type == "semi-structured_act_grad_acc":
             self.grad_input = None
@@ -189,8 +196,35 @@ class Linear_act_sp(nn.Module):
         # eta = torch.mean(x, dim=1, keepdim=True)
         eta = torch.median(x, dim=1, keepdim=True)[0]
         return eta
+        
+
+    def collect_eta(self, x):
+        global COLLECT_ETA_PRINT_COUNT
+        if self.eta_collection_completed:
+            return
+            
+        current_eta = self.bias_term(x).mean()
+        
+        if self.eta_counter < self.eta_buffer_size:
+            self.eta_buffer[self.eta_counter] = current_eta
+            self.eta_counter += 1
+            
+            if self.eta_counter == self.eta_buffer_size:
+                self.static_eta = self.eta_buffer.mean()
+                if COLLECT_ETA_PRINT_COUNT < 1:
+                    print(f"Static eta collected: {self.static_eta.item()}")
+                    COLLECT_ETA_PRINT_COUNT += 1
+
+    def get_eta_to_use(self, x):
+        if not torch.isnan(self.static_eta):
+            static_eta = self.static_eta.to(x.device, dtype=x.dtype)
+            return self.static_eta.expand(x.shape[0], 1)
+        else:
+            return self.bias_term(x)
 
     def shift_transformation(self, x, pruner, eta):
+        if eta.device != x.device or eta.dtype != x.dtype:
+            eta = eta.to(x.device, dtype=x.dtype)
         x_shifted = x - eta
         x_sp = pruner(x_shifted)
         x_sp_shifted = x_sp + eta
@@ -248,6 +282,9 @@ class Linear_act_sp(nn.Module):
         x_flat = x.view(-1, self.in_features)
         out = None
 
+        if self.transformation_type == "shift" and torch.isnan(self.static_eta):
+            self.collect_eta(x_flat)
+
         # Without pruning
         if self.sparsity_type is None:
             out = x @ self.weight.t()
@@ -267,8 +304,9 @@ class Linear_act_sp(nn.Module):
                 x_sp = pruner(x_flat) 
                 out = self.variance_transformation(x_flat, x_sp) @ self.weight.t()
 
-            elif self.transformation_type == "shift":
-                out = self.shift_transformation(x_flat, pruner, self.bias_term(x_flat)) @ self.weight.t()
+            if self.transformation_type == "shift":
+                eta_to_use = self.get_eta_to_use(x_flat)
+                out = self.shift_transformation(x_flat, pruner, eta_to_use) @ self.weight.t()
             
             elif self.transformation_type == "learnable":
                 x_sp = self.learnable_transformation(x_flat, pruner)
