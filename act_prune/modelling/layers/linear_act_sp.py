@@ -18,6 +18,7 @@ class Linear_act_sp(nn.Module):
         name=None,
         additional_transformation=None,
         eta_buffer_size=100,  
+        pca_buffer_size=8192,  # For La-Rosa-method — how many samples to collect for PCA
     ):
         super().__init__()
         self.in_features = in_features
@@ -30,12 +31,25 @@ class Linear_act_sp(nn.Module):
         self.register_buffer("weight", None)
         self.name = name
         self.additional_transformation = additional_transformation
+
+        # ETA cache
         self.eta_buffer_size = eta_buffer_size
         self.eta_collection_completed = False
-
         self.register_buffer("eta_buffer", torch.zeros(eta_buffer_size))
         self.register_buffer("eta_counter", torch.tensor(0))
         self.register_buffer("static_eta", torch.tensor(float('nan')))
+
+        # PCA cache - For La-Rosa-method
+        self.pca_buffer_size = pca_buffer_size
+        self.pca_collection_completed = False
+        self.register_buffer(
+            "pca_buffer",
+            torch.zeros(pca_buffer_size, in_features, dtype=torch.float32, device="cpu"),
+            persistent=False
+        )
+        self.register_buffer("pca_counter", torch.tensor(0))
+        self.register_buffer("static_Q_rotation", torch.empty(0), persistent=True)   # [in, in]
+        self.register_buffer("static_W_folded",  torch.empty(0), persistent=True)
 
         if sparsity_type == "semi-structured_act_grad_acc":
             self.grad_input = None
@@ -345,6 +359,49 @@ class Linear_act_sp(nn.Module):
         else:
             self.grad_input += grad_input[0]
 
+    # La-Rosa PCA rotation
+    def collect_pca_Q(self, x):        
+        remaining = int(self.pca_buffer_size - int(self.pca_counter.item()))
+        if remaining > 0:
+            take = min(remaining, x.shape[0])
+            if take > 0:
+                xs = x[:take].detach().to("cpu", dtype=torch.float32)
+                start = int(self.pca_counter.item())
+                self.pca_buffer[start:start+take].copy_(xs)
+                self.pca_counter += take
+
+        # Compute PCA
+        n = int(self.pca_counter.item())
+        X = self.pca_buffer[:n]
+        X -= X.mean(dim=0, keepdim=True)
+        Vh = torch.linalg.svd(X, full_matrices=False).Vh
+        Q_cpu = Vh.t()
+
+        dev, dt = self.weight.device, self.weight.dtype
+        Q = Q_cpu.to(dev, dtype=dt)
+        W_folded = (self.weight @ Q)
+        
+        # Store rotation and folded weights if remaining is 0
+        if self.pca_counter >= self.pca_buffer_size:
+            self.static_Q_rotation = Q
+            self.static_W_folded = W_folded
+            self.pca_collection_completed = True
+            print(f"PCA collection completed for layer {self.name}, Q shape: {self.static_Q_rotation.shape}")
+            
+        return Q, W_folded
+    
+    def get_pca_Q_and_W_folded_to_use(self, x):
+        if self.pca_collection_completed and self.static_Q_rotation.numel() and self.static_W_folded.numel():
+            dev, dt = self.weight.device, self.weight.dtype
+            return self.static_Q_rotation.to(dev, dtype=dt), self.static_W_folded.to(dev, dtype=dt)
+        else:
+            return self.collect_pca_Q(x)
+        
+    def la_rosa_transformation(self, x, pruner):
+        Q, W_folded = self.get_pca_Q_and_W_folded_to_use(x)
+        x_transformed = x @ Q
+        return pruner(x_transformed) @ W_folded.t()
+
     def forward(self, x):
         bs, seq_len, _ = x.shape
         x_flat = x.view(-1, self.in_features)
@@ -417,6 +474,9 @@ class Linear_act_sp(nn.Module):
             # x_sp = x_sp.to_dense()
         elif self.transformation_type == "scaling" or self.additional_transformation == "scaling":
             out = self.scaling_transformation(x_flat, pruner)
+        elif self.transformation_type == "la_rosa":
+            out = self.la_rosa_transformation(x_flat, pruner)
+
         else:
             out = pruner(x_flat) @ self.weight.t()
         
