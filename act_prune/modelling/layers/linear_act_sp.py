@@ -18,7 +18,7 @@ class Linear_act_sp(nn.Module):
         name=None,
         additional_transformation=None,
         eta_buffer_size=100,  
-        pca_buffer_size=2048,  # For La-Rosa-method — how many samples to collect for PCA
+        pca_buffer_size=8192,  # For La-Rosa-method — how many samples to collect for PCA
     ):
         super().__init__()
         self.in_features = in_features
@@ -67,16 +67,57 @@ class Linear_act_sp(nn.Module):
         x_sp = x * mask
         return x_sp
 
-    def semi_structural_magnitude_pruner(self, x, prune_n=2, prune_m=4):
-        orig_shape = x.shape
-        x_1d = x.view(-1, prune_m)
+    # def semi_structural_magnitude_pruner(self, x, prune_n=2, prune_m=4):
+    #     orig_shape = x.shape
+    #     x_1d = x.view(-1, prune_m)
 
-        _, idx = torch.topk(x_1d.abs(), prune_n, dim=1, sorted=False)
-        mask_1d = torch.zeros_like(x_1d)
-        mask_1d.scatter_(dim=1, index=idx, value=True)
-        mask = mask_1d.view(orig_shape)
-        x_sp = x * mask
-        return x_sp
+    #     _, idx = torch.topk(x_1d.abs(), prune_n, dim=1, sorted=False)
+    #     mask_1d = torch.zeros_like(x_1d)
+    #     mask_1d.scatter_(dim=1, index=idx, value=True)
+    #     mask = mask_1d.view(orig_shape)
+    #     x_sp = x * mask
+    #     return x_sp
+    
+    
+    def semi_structural_magnitude_pruner(self, x, prune_n=2, prune_m=4):
+        def prune_nm_blockwise(x, prune_n: int, prune_m: int):
+            """
+            Полуструктурный прайнинг n:m, группируем по последней оси (признаки).
+            Паддим нулями справа, если длина не кратна m, потом обрезаем паддинг.
+            x: [B, F] или [*, F]
+            """
+            # Приводим к 2D, запоминаем исходную форму
+            orig_shape = x.shape
+            x2d = x.contiguous().view(-1, orig_shape[-1])  # [B, F]
+            B, F = x2d.shape
+
+            # Паддинг до кратности m
+            pad = (-F) % prune_m  # сколько нужно допаддить справа
+            if pad:
+                x2d = torch.nn.functional.pad(x2d, (0, pad))  # паддим по последней оси
+            Fp = F + pad  # новая длина признаков после паддинга
+
+            # Группировка по m
+            G = Fp // prune_m                       # число групп
+            xg = x2d.view(B, G, prune_m)            # [B, G, m]
+
+            # Счёты важности — здесь простая |x|, как у magnitude
+            scores = xg.abs()
+
+            # Защита на случай, если n > m
+            k = min(prune_n, prune_m)
+
+            # Выбор топ-k по каждой группе
+            _, idx = torch.topk(scores, k=k, dim=-1, largest=True, sorted=False)
+            mask = torch.zeros_like(xg, dtype=torch.bool).scatter_(-1, idx, True)
+
+            xg_pruned = xg * mask  # [B, G, m]
+            x2d_pruned = xg_pruned.view(B, Fp)
+
+            # Убираем паддинг и возвращаем исходную размерность
+            x2d_pruned = x2d_pruned[:, :F]          # [B, F]
+            return x2d_pruned.view(orig_shape)
+        return prune_nm_blockwise(x, prune_n, prune_m)
     
     def semi_structural_magnitude_columnwise_pruner(self, x, prune_n=2, prune_m=4):
         orig_shape = x.shape
@@ -374,12 +415,19 @@ class Linear_act_sp(nn.Module):
         n = int(self.pca_counter.item())
         X = self.pca_buffer[:n]
         X -= X.mean(dim=0, keepdim=True)
-        Vh = torch.linalg.svd(X, full_matrices=False).Vh
-        Q = Vh.t()
+        # Vh = torch.linalg.svd(X, full_matrices=False).Vh
+        # Q = Vh.t()
 
-        dev, dt = self.weight.device, self.weight.dtype
-        Q = Q.to(dev, dtype=dt)
+        # dev, dt = self.weight.device, self.weight.dtype
+        # Q = Q.to(dev, dtype=dt)
 
+        # W_folded = self.weight @ Q
+        
+        C = (X.t() @ X) / max(n - 1, 1)
+        evals, Q = torch.linalg.eigh(C)
+        Q = Q.flip(dims=[-1])
+
+        Q = Q.to(self.weight.device, self.weight.dtype)
         W_folded = self.weight @ Q
         
         # Store rotation and folded weights if remaining is 0
