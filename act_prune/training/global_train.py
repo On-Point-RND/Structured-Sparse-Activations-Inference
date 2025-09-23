@@ -189,30 +189,6 @@ def load_hf_datasets(
             streaming=data_args.streaming,
             trust_remote_code=data_args.trust_remote_code
         )
-
-        # if "validation" not in raw_datasets.keys():
-        #     raw_datasets["validation"] = load_dataset(
-        #         data_args.dataset_name,
-        #         data_args.dataset_config_name,
-        #         split=f"train[:{data_args.validation_split_percentage}%]",
-        #         streaming=data_args.streaming,
-        #         trust_remote_code=data_args.trust_remote_code
-        #     )
-        #     raw_datasets["train"] = load_dataset(
-        #         data_args.dataset_name,
-        #         data_args.dataset_config_name,
-        #         split=f"train[{data_args.validation_split_percentage}%:]",
-        #         streaming=data_args.streaming,
-        #         trust_remote_code=data_args.trust_remote_code
-        #     )
-        
-        # if data_args.dataset_percentage < 100:
-        #     dataset_frac = data_args.dataset_percentage/100
-        #     dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac)
-        #     raw_datasets['train'] = dataset_parts['train']
-        #     dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac)
-        #     raw_datasets['validation'] = dataset_parts['test']
-
         return raw_datasets
 
 def tokenize_datasets(
@@ -303,20 +279,16 @@ def run_train(
     data_args = DataTrainingArguments(
         dataset_name = config_ft['dataset_name'],
         dataset_config_name = config_ft['dataset_config_name'],
-        # validation_split_percentage = config_ft['validation_split_percentage'],
         max_seq_length = config_ft['max_seq_length'],
-        # dataset_percentage = config_ft['dataset_percentage'],
         trust_remote_code = config_ft['trust_remote_code'],
         preprocessing_num_workers = config_ft['preprocessing_num_workers']
     )
 
     training_args = TrainingArguments(
-        # run_name=config.run_name,
         output_dir = config_ft['output_dir'],
         overwrite_output_dir = True,
         learning_rate = config_ft['learning_rate'], 
         seed = config_ft['seed'], 
-        # max_steps = config_ft['max_steps'],
         num_train_epochs = config_ft['num_train_epochs'], #3,
         weight_decay = config_ft['weight_decay'], #0.1,
         warmup_ratio = config_ft['warmup_ratio'],
@@ -327,43 +299,12 @@ def run_train(
         gradient_checkpointing=config_ft['gradient_checkpointing'], #False,
         save_strategy = config_ft['save_strategy'],
         save_steps = config_ft['save_steps'],
-        # evaluation_strategy = config.evaluation_strategy,
-        # eval_steps = config.eval_steps,
         bf16=True,
         logging_steps = 1,
         do_train = True,
         do_eval = False,
-        # report_to = config['report_to']
     )
     
-    # Load pretrained tokenizer
-    # tokenizer_kwargs = {
-    #     "cache_dir": model_args.cache_dir,
-    #     "use_fast": model_args.use_fast_tokenizer,
-    #     "revision": model_args.model_revision,
-    #     "token": model_args.token,
-    #     "trust_remote_code": model_args.trust_remote_code,
-    # }
-
-    # if model_args.tokenizer_name:
-    #     tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
-    # elif model_args.model_name_or_path:
-    #     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
-
-    # Load pretrained model
-    # model = AutoModelForCausalLM.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     torch_dtype=torch.bfloat16,
-    #     token=model_args.token,
-    #     device_map = 'auto'
-    # )
-
-    # for name, param in model.named_parameters():
-    #     param.requires_grad = False
-
-
-
-
     #Load and preprocessing dataset
     tokenizer.pad_token = tokenizer.eos_token
     raw_datasets = load_hf_datasets(data_args)
@@ -374,10 +315,6 @@ def run_train(
     eval_dataset = lm_datasets.get("validation", None)
 
     logging.info("dataset prepared")
-
-    # data_collator = DataCollatorWithMaskForCausalLM(
-    #     tokenizer=tokenizer
-    # )
 
     trainable_params = 0
     all_param = 0
@@ -401,5 +338,4 @@ def run_train(
 
     train_result = trainer.train()
 
-    # trainer.save_model()  # Saves the tokenizer too for easy upload
     return model

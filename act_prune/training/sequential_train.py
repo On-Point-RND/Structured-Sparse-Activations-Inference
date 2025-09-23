@@ -2,7 +2,6 @@ from datasets import load_dataset
 import torch
 import torch.nn as nn
 from torch.amp import autocast
-from torch.amp import GradScaler
 from transformers.utils import logging
 from torch.optim import AdamW
 from transformers.optimization import get_linear_schedule_with_warmup
@@ -15,7 +14,6 @@ from tqdm import tqdm
 
 from modelling.layers.linear_act_sp import Linear_act_sp
 
-scaler = GradScaler()
 logger = logging.get_logger(__name__)
 
 
@@ -78,7 +76,6 @@ def find_layers(module, layers=[nn.Linear, Linear_act_sp], name=''):
         return {name: module}
     res = {}
     for name1, child in module.named_children():
-        #print(child)
         res.update(find_layers(
             child, layers=layers, name=name + '.' + name1 if name != '' else name1
         ))
@@ -106,8 +103,6 @@ def prepare_calibration_input(args, model, tokenizer, dataloader, device):
     outs = torch.zeros_like(inps)
     attention_mask = (batch[0] != tokenizer.pad_token_id).to(device)
     position_ids = torch.arange(batch[0].shape[1], device=device).unsqueeze(0)
-    # attention_mask = cache[2].to(device)
-    # position_ids = cache[1].to(device)
     model.config.use_cache = use_cache
 
     return inps, outs, attention_mask, position_ids 
@@ -116,14 +111,11 @@ def prepare_calibration_input(args, model, tokenizer, dataloader, device):
 def val(layer, inps, outs, dataloader, batch_size, device, attention_mask, position_embeddings, layer_index=None):
     ret_loss = 0
     len_dataloader = len(dataloader)
-    # __attention_mask = attention_mask.expand(args.infer_batch_size,-1,-1,-1)
     tensordata = TensorData(inps, outs, device)
     tensordata_loader = TensorDataLoader(tensordata, batch_size, shuffle=False, num_workers=0).get_loader()
     criterion = nn.MSELoss(reduction="mean").to(device)
     with torch.no_grad():
-        # layer.eval()
         for inputs, outs in tensordata_loader:
-            # with autocast(device_type=device.type, dtype=torch.float16):
             outputs = layer(inputs, attention_mask=attention_mask, position_embeddings=position_embeddings)[0]
             loss = criterion(outputs, outs)
 
@@ -136,9 +128,23 @@ def mark_only_shift_as_trainable(model: nn.Module) -> None:
         if 'shift' not in n:
             p.requires_grad = False
 
-def mark_only_var_and_eta_as_trainable(model: nn.Module) -> None:
+
+def mark_only_bias_as_trainable(model: nn.Module) -> None:
     for n, p in model.named_parameters():
-        if 'variance' not in n and 'eta' not in n:
+        if 'bias' not in n:
+            p.requires_grad = False
+
+
+def mark_only_scale_and_shift_as_trainable(model: nn.Module) -> None:
+    for n, p in model.named_parameters():
+        if 'scale' not in n and 'shift' not in n:
+            p.requires_grad = False
+
+
+def mark_only_lora_AB_as_trainable(model: nn.Module) -> None:
+    for n, p in model.named_parameters():
+        print(n)
+        if 'low_rank_A' not in n and 'low_rank_B' not in n:
             p.requires_grad = False
 
 
@@ -147,6 +153,7 @@ def prepare_optimizer_and_scheduler(layer, config, max_steps):
     learning_rate = config["finetuning"]["learning_rate"]
     adam_beta1 = config["finetuning"].get("adam_beta1", 0.9)
     adam_beta2 = config["finetuning"].get("adam_beta2", 0.95)
+    learnable_params = config["finetuning"].get("parameters", None)
     warmup_steps = config["finetuning"]["warmup_ratio"] * max_steps
     warmup_steps = int(warmup_steps)
 
@@ -156,40 +163,35 @@ def prepare_optimizer_and_scheduler(layer, config, max_steps):
             logger.info(
                 f"{des}, number of params: {sum(p.nelement() for p in grouped_parameters['params'])}, weight_decay:{grouped_parameters['weight_decay']}, lr: {grouped_parameters['lr']}")
 
-    # main_model_params = [
-    #     {
-    #         "params": [p for n, p in layer.named_parameters() if 'shift' in n],
-    #         "weight_decay": weight_decay,
-    #         "lr": learning_rate
-    #     },
-    # ]
-
-    # main_model_params = [
-    #     {
-    #         "params": [p for n, p in layer.named_parameters() if 'mask' not in n],
-    #         "weight_decay": weight_decay,
-    #         "lr": learning_rate
-    #     },
-    # ]
-    # log_params(main_model_params, "learnable params")
+    model_params = []
+    if learnable_params in ["shift", "shift2", "var_shift"]:
+        model_params = [p for n, p in layer.named_parameters() if 'shift' in n]
+    elif learnable_params in ["bias1", "bias2"]:
+        model_params = [p for n, p in layer.named_parameters() if 'bias' in n]
+    elif learnable_params in ["scale_shift", "var_scale_shift"]:
+        model_params = [p for n, p in layer.named_parameters() if 'shift' in n or 'scale' in n]
+    elif learnable_params == 'r-sparce':
+        model_params = [p for n, p in layer.named_parameters() if 'low_rank_A' in n or 'low_rank_B' in n]
 
     optimizer = AdamW(
-        [p for n, p in layer.named_parameters() if 'shift' in n],
+        model_params,
         lr=learning_rate,
         weight_decay=weight_decay,
         betas=(adam_beta1, adam_beta2),
     )
+    
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=max_steps
     )
+    
     return optimizer, lr_scheduler
 
 
 def train(layer, inps, outs, dataloader, config, device, attention_mask, position_embeddings, layer_index=None):
-    
     batch_size = config["finetuning"]["per_device_train_batch_size"]
     num_train_epoch = config["finetuning"]["num_train_epochs"]
     max_grad_norm = config["finetuning"].get("max_grad_norm", 1.0)
+    learnable_params = config["finetuning"].get("parameters", None)
     
     init_loss = val(layer, inps, outs, dataloader, batch_size, device, attention_mask, position_embeddings, layer_index=layer_index)
 
@@ -197,8 +199,16 @@ def train(layer, inps, outs, dataloader, config, device, attention_mask, positio
     num_update_steps_per_epoch = len_dataloader // batch_size
     num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
     max_steps = math.ceil(num_train_epoch * num_update_steps_per_epoch)
-    mark_only_shift_as_trainable(layer)
-    # mark_only_var_and_eta_as_trainable(layer)
+
+    if learnable_params in ["shift", "shift2", "var_shift"]:
+        mark_only_shift_as_trainable(layer)
+    elif learnable_params in ["bias1", "bias2"]:
+        mark_only_bias_as_trainable(layer)    
+    elif learnable_params in ["scale_shift", "var_scale_shift"]:
+        mark_only_scale_and_shift_as_trainable(layer)    
+    elif learnable_params == 'r-sparce':
+        mark_only_lora_AB_as_trainable(layer)
+    
     optimizer, lr_scheduler = prepare_optimizer_and_scheduler(layer, config, max_steps)
     criterion = nn.MSELoss(reduction="mean").cuda()
     losses = []
@@ -207,10 +217,8 @@ def train(layer, inps, outs, dataloader, config, device, attention_mask, positio
     tensordata = TensorData(inps, outs, device)
     tensordata_loader = TensorDataLoader(tensordata, batch_size, shuffle=True, num_workers=0).get_loader()
     for epoch in range(0, num_train_epoch):
-        # layer.train()
         print("epoch {}".format(epoch))
         for inputs, outps in tensordata_loader:
-            # with autocast(device_type=device.type, dtype=torch.float16):
             outputs = layer(inputs, attention_mask=attention_mask, position_embeddings=position_embeddings)[0]
             loss = criterion(outputs, outps)
             lr = lr_scheduler.get_last_lr()[0]
@@ -224,17 +232,6 @@ def train(layer, inps, outs, dataloader, config, device, attention_mask, positio
             optimizer.zero_grad()
             layer.zero_grad()
 
-
-            # 用scaler，scale loss(FP16)，backward得到scaled的梯度(FP16)
-            # scaler.scale(loss).backward()
-            # scaler.unscale_(optimizer)
-            # torch.nn.utils.clip_grad_norm_(
-            #             layer.parameters(), max_grad_norm)
-            # scaler.step(optimizer)
-            # scaler.update()
-            # lr_scheduler.step()
-            # optimizer.zero_grad()
-            # # layer.zero_grad()
             losses.append(loss.detach().cpu().item())
 
     torch.cuda.empty_cache()
@@ -248,12 +245,11 @@ def train(layer, inps, outs, dataloader, config, device, attention_mask, positio
     print(final_loss)
     
     return init_loss, final_loss
-    # return None
 
 
 def sequential_parameter_training(config, model, dataloader, dev=torch.device("cuda:0")):
     print("Starting...")
-    nsamples = 256
+    nsamples = len(dataloader)
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
@@ -309,17 +305,30 @@ def sequential_parameter_training(config, model, dataloader, dev=torch.device("c
             subset[name].sparsity_type = None
 
         with torch.no_grad():
-            # with autocast(device_type=dev.type, dtype=torch.float16):
             for j in range(0, nsamples):
-                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_embeddings=position_embeddings)[0]
+                outs[j] = layer(
+                    inps[j].unsqueeze(0), 
+                    attention_mask=attention_mask, 
+                    position_embeddings=position_embeddings
+                )[0]
+                
         for name in subset:
             subset[name].sparsity_type = config["pruning"]["sparsity_type"]
-        init_loss, final_loss = train(layer, inps, outs, dataloader, config, dev, attention_mask=attention_mask, position_embeddings=position_embeddings, layer_index=i)            
+
+        init_loss, final_loss = train(
+            layer, inps, outs, dataloader, config, 
+            dev, attention_mask=attention_mask, 
+            position_embeddings=position_embeddings, 
+            layer_index=i
+        )
 
         with torch.no_grad():
-            # with autocast(device_type=dev.type, dtype=torch.float16):
             for j in range(0, nsamples):
-                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_embeddings=position_embeddings)[0]    
+                outs[j] = layer(
+                    inps[j].unsqueeze(0), 
+                    attention_mask=attention_mask, 
+                    position_embeddings=position_embeddings
+                )[0]    
 
         layers[i] = layer.cpu()
         del layer

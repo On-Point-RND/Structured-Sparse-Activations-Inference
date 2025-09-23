@@ -24,6 +24,7 @@ class ActPruneRunner(BaseRunner):
                                        self.config["pruning"]["sparsity_type"],
                                        self.config["pruning"]["transformation_type"],
                                        self.config["pruning"].get("sparsity_ratio", None),
+                                       self.config["finetuning"].get("parameters", None),
                                        self.config["pruning"].get("prune_n", None),
                                        self.config["pruning"].get("prune_m", None),
                                        self.config["pruning"]["target_modules"],

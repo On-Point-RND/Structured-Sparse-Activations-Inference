@@ -17,6 +17,7 @@ class Linear_act_sp(nn.Module):
         prune_m=None,  # if sparsity_type is "semi-structured_act_magnitude"
         name=None,
         additional_transformation=None,
+        learnable_params=None,
     ):
         super().__init__()
         self.in_features = in_features
@@ -29,17 +30,56 @@ class Linear_act_sp(nn.Module):
         self.register_buffer("weight", None)
         self.name = name
         self.additional_transformation = additional_transformation
+        self.learnable_params = learnable_params
 
         if sparsity_type == "semi-structured_act_grad_acc":
             self.grad_input = None
 
         if self.transformation_type == "learnable":
-            v = torch.zeros((1, out_features))
-            self.shift = nn.Parameter(v)
+            if self.learnable_params in ["shift", "var_shift", "var_learnable_shift"]:
+                v = torch.zeros((1, out_features))
+                self.shift = nn.Parameter(v)
+            elif self.learnable_params == "shift2":
+                v = torch.zeros((1, in_features))
+                self.shift2 = nn.Parameter(v)
+            elif "bias" in self.learnable_params:
+                b = torch.zeros((in_features, 1))
+                self.bias = nn.Parameter(b)
+            elif self.learnable_params in ["scale_shift", "var_scale_shift"]:
+                v = torch.zeros((1, out_features))
+                self.scale = nn.Parameter(v, requires_grad=True)
+                w = torch.zeros((1, out_features))
+                self.shift = nn.Parameter(w)
+            elif self.learnable_params == 'r-sparce':
+                # rank_ratio = 0.1
+                # rank = max(1, int(min(self.in_features, self.out_features) * rank_ratio))
+                rank = 128
+                rank = min(rank, self.out_features, self.in_features)
+                # low_rank_A, low_rank_B, rank = self.compute_low_rank_approximation(rank_ratio)
+                self.low_rank_A = nn.Parameter(torch.randn(self.out_features, rank) * 0.02)
+                self.low_rank_B = nn.Parameter(torch.randn(rank, self.in_features) * 0.02)
+                self.low_rank_rank = rank
 
         if self.sparsity_type == "semi-structured_act_magnitude_var_weight":
             self.var_weight = None
 
+    def compute_low_rank_approximation(self, rank_ratio=0.1):
+        U, S, Vh = torch.linalg.svd(self.weight, full_matrices=False)
+        
+        rank = max(1, int(min(self.in_features, self.out_features) * rank_ratio))
+        rank = min(rank, len(S))
+        
+        U_r = U[:, :rank]
+        S_r = S[:rank]
+        Vh_r = Vh[:rank, :]
+        
+        sqrt_S_r = torch.sqrt(S_r)
+        
+        low_rank_A = torch.matmul(U_r, torch.diag(sqrt_S_r))
+        low_rank_B = torch.matmul(torch.diag(sqrt_S_r), Vh_r)
+
+        return low_rank_A, low_rank_B, rank
+    
     def unstructured_magnitude_pruner(self, x, sparsity_ratio):
         orig_shape = x.shape
         num_elements_to_keep = int(orig_shape[1] * (1.0 - sparsity_ratio))
@@ -242,7 +282,6 @@ class Linear_act_sp(nn.Module):
         
         return x * mask
     
-
     def variance_factor(self, x, x_sp):
         var_ratio = torch.var(x, dim=1, keepdim=True) / torch.clamp(torch.var(x_sp, dim=1, keepdim=True), min=1e-9)
         v = torch.sqrt(var_ratio)
@@ -273,31 +312,7 @@ class Linear_act_sp(nn.Module):
         return x_flat_sp @ scaled_weight.t()
         
     def learnable_transformation(self, x, pruner):
-        x_sp = pruner(x)
-
-        # eta = self.bias_term(x)
-        # x_shifted = x - eta
-        # x_sp = pruner(x_shifted)
-        # v = self.variance_factor(x_shifted, x_sp)
-        # x_sp_shifted = v * x_sp + eta
-
-        
-        # eta = self.local_bias_term(x)
-        # x_sp_shifted = self.shift_transformation(x, pruner, eta)
-
-
-        # if not hasattr(self, 'eta'):
-        #     self.eta = nn.Parameter(self.bias_term(x))
-            
-        # bs = x.shape[0]
-        # x_sp_shifted = self.shift_transformation(x, pruner, self.eta[:bs])
-
-        # if not hasattr(self, 'v'):
-        #     x_sp = pruner(x)
-        #     self.v = nn.Parameter(self.variance_factor(x, x_sp))
-        
-        # corr_x_sp_shifted = self.v * x_sp_shifted
-        
+        x_sp = pruner(x)        
         return x_sp
 
     def prune_with_additional_transformation(self, x, pruner):
@@ -363,24 +378,69 @@ class Linear_act_sp(nn.Module):
                 #out = self.prune_with_additional_transformation(x_flat, pruner)
 
 
-        # Apply transformations
-        if self.transformation_type == "variance":
-            x_sp = pruner(x_flat) 
-            x_transformed = self.variance_transformation(x_flat, x_sp)
-            out = x_transformed  @ self.weight.t()
-
-        elif self.transformation_type == "shift":
-            x_sp = self.shift_transformation(x_flat, pruner, self.bias_term(x_flat)) 
-            out = x_sp @ self.weight.t()
-        
-        elif self.transformation_type == "learnable":
-            x_sp = self.learnable_transformation(x_flat, pruner)
-            out = torch.matmul(x_sp, self.weight.t()) + self.shift
+            # Apply transformations
+            if self.transformation_type == "variance":
+                x_sp = pruner(x_flat) 
+                x_transformed = self.variance_transformation(x_flat, x_sp)
+                out = x_transformed  @ self.weight.t()
+    
+            elif self.transformation_type == "shift":
+                x_sp = self.shift_transformation(x_flat, pruner, self.bias_term(x_flat)) 
+                out = x_sp @ self.weight.t()
             
-        elif self.transformation_type == "scaling" or self.additional_transformation == "scaling":
-            out = self.scaling_transformation(x_flat, pruner)
-        else:
-            out = pruner(x_flat) @ self.weight.t()
+            elif self.transformation_type == "learnable":
+                
+                if self.learnable_params == "shift": # x_sp @ W.t + shift
+                    x_sp = self.learnable_transformation(x_flat, pruner)
+                    out = torch.matmul(x_sp, self.weight.t()) + self.shift
+                    
+                elif self.learnable_params == "shift2": # from paper: ((x - shift)_sp + shift) @ W.t
+                    out = self.shift_transformation(x_flat, pruner, self.shift2) @ self.weight.t()
+
+                elif self.learnable_params == "var_shift":
+                    x_sp = pruner(x_flat)
+                    out = torch.matmul(x_sp, self.weight.t()) * (1 + self.shift)
+
+                elif self.learnable_params == "bias1":
+                    x_sp = pruner(x_flat)
+                    out = x_sp @ self.weight.t() + x_sp @ self.bias
+
+                elif self.learnable_params == "bias2":
+                    x_sp = pruner(x_flat)
+                    x_res = x_flat - x_sp
+                    out = torch.matmul(x_sp, self.weight.t()) + torch.matmul(x_res, self.bias)
+
+                elif self.learnable_params == "scale_shift":
+                    x_sp = pruner(x_flat)
+                    out = torch.matmul(x_sp, self.weight.t()) * (1 + self.scale) + self.shift
+
+                elif self.learnable_params == "var_scale_shift":
+                    x_sp = pruner(x_flat)
+                    corr_x_sp = self.variance_transformation(x_flat, x_sp)
+                    out = torch.matmul(corr_x_sp, self.weight.t()) * (1 + self.scale) + self.shift
+
+                elif self.learnable_params == "var_learnable_shift":
+                    x_sp = pruner(x_flat)
+                    corr_x_sp = self.variance_transformation(x_flat, x_sp)
+                    out = torch.matmul(corr_x_sp, self.weight.t()) + self.shift
+
+                elif self.learnable_params == 'r-sparce':
+                    bs, seq_len, _ = x.shape
+                    x_flat = x.view(-1, self.in_features)
+                    
+                    x_sparse = pruner(x_flat)
+                    x_residual = x_flat - x_sparse
+                    
+                    y_sparse = torch.matmul(x_sparse, self.weight.t())
+                    y_residual = torch.matmul(torch.matmul(x_residual, self.low_rank_B.t()), self.low_rank_A.t())
+                    
+                    out = y_sparse + y_residual
+                
+            elif self.transformation_type == "scaling" or self.additional_transformation == "scaling":
+                out = self.scaling_transformation(x_flat, pruner)
+                
+            else:
+                out = pruner(x_flat) @ self.weight.t()
         
         # else:
         #     raise ValueError(f"Unknown sparsity_type: {self.sparsity_type}")
@@ -398,6 +458,7 @@ class Linear_act_sp(nn.Module):
         prune_m=None,
         name=None,
         additional_transformation=None,
+        learnable_params=None,
     ):
         linear_sp = cls(
             orig_linear.in_features,
@@ -409,16 +470,45 @@ class Linear_act_sp(nn.Module):
             prune_m=prune_m,
             name=name,
             additional_transformation=additional_transformation,
+            learnable_params=learnable_params,
         )
 
         linear_sp.weight = orig_linear.weight.data
 
         if transformation_type == "learnable":
-            linear_sp.shift.data = linear_sp.shift.data.to(
-                dtype=orig_linear.weight.dtype,
-                # dtype=torch.bfloat16,
-                device=orig_linear.weight.device
-            )
+            if learnable_params in ["shift", "var_shift", "var_learnable_shift"]:
+                linear_sp.shift.data = linear_sp.shift.data.to(
+                    dtype=orig_linear.weight.dtype,
+                    device=orig_linear.weight.device
+                )
+            elif learnable_params == "shift2":
+                linear_sp.shift2.data = linear_sp.shift2.data.to(
+                    dtype=orig_linear.weight.dtype,
+                    device=orig_linear.weight.device
+                )
+            elif "bias" in learnable_params:
+                linear_sp.bias.data = linear_sp.bias.data.to(
+                    dtype=orig_linear.weight.dtype,
+                    device=orig_linear.weight.device
+                )
+            elif learnable_params in ["scale_shift", "var_scale_shift"]:
+                linear_sp.scale.data = linear_sp.scale.data.to(
+                    dtype=orig_linear.weight.dtype,
+                    device=orig_linear.weight.device
+                )
+                linear_sp.shift.data = linear_sp.shift.data.to(
+                    dtype=orig_linear.weight.dtype,
+                    device=orig_linear.weight.device
+                )
+            elif learnable_params == 'r-sparce':
+                linear_sp.low_rank_A.data = linear_sp.low_rank_A.data.to(
+                    dtype=orig_linear.weight.dtype,
+                    device=orig_linear.weight.device
+                )
+                linear_sp.low_rank_B.data = linear_sp.low_rank_B.data.to(
+                    dtype=orig_linear.weight.dtype,
+                    device=orig_linear.weight.device
+                )
         
         if sparsity_type == "semi-structured_act_magnitude_var_weight":
             linear_sp.var_weight = torch.var(orig_linear.weight.data, dim=0, keepdim=True)

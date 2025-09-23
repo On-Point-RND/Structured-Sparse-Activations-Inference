@@ -23,12 +23,12 @@ class ModelConfig:
 
 @dataclass
 class PPLWikitext2Config:
-    run_ppl: bool = False
+    run_ppl: bool = True
     batch_size: int = 8
 
 @dataclass
 class HarnessConfig:
-    run_lm_eval: bool = True
+    run_lm_eval: bool = False
     tasks: List[str] = field(default_factory=lambda: ["arc_challenge", "boolq", "arc_easy", "piqa", "winogrande", "hellaswag"])
     num_fewshot: int = 0
     batch_size: int = 512
@@ -42,7 +42,7 @@ class BenchmarksConfig:
 @dataclass
 class PruningConfig:
     sparsity_type: str = "semi-structured_act_magnitude"
-    transformation_type: str = "variance"
+    transformation_type: str = "learnable"
     sparsity_ratio: float = 0.5
     additional_transformation: str = "none"
     prune_n: int = 2
@@ -54,10 +54,11 @@ class PruningConfig:
 
 @dataclass
 class FinetuningConfig:
-    type: str = "global"
-    output_dir: str = "/home/LLM_activation_pruning/act_prune/artifacts/models/llama2_7b_wiki"
+    type: str = "by_layers"
+    output_dir: str = "/home/LLM_activation_pruning/act_prune/artifacts/models/llama3_8b_wiki"
     dataset_name: str = "Salesforce/wikitext"
     dataset_config_name: str = "wikitext-2-raw-v1"
+    parameters: str = "scale_shift"
     seed: int = 11
     max_seq_length: int = 2048
     preprocessing_num_workers: int = 8
