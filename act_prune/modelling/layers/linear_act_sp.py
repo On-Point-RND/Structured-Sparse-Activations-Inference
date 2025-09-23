@@ -193,16 +193,13 @@ class Linear_act_sp(nn.Module):
         return corr_x_sp
 
     def bias_term(self, x):
-        # eta = torch.mean(x, dim=1, keepdim=True)
         eta = torch.median(x, dim=1, keepdim=True)[0]
         return eta
         
 
     def collect_eta(self, x):
         global COLLECT_ETA_PRINT_COUNT
-        if self.eta_collection_completed:
-            return
-            
+        
         current_eta = self.bias_term(x).mean()
         
         if self.eta_counter < self.eta_buffer_size:
@@ -217,8 +214,7 @@ class Linear_act_sp(nn.Module):
 
     def get_eta_to_use(self, x):
         if not torch.isnan(self.static_eta):
-            static_eta = self.static_eta.to(x.device, dtype=x.dtype)
-            return self.static_eta.expand(x.shape[0], 1)
+            return self.static_eta.to(x.device, dtype=x.dtype).expand(x.size(0), 1)
         else:
             return self.bias_term(x)
 
