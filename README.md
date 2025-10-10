@@ -1,3 +1,5 @@
+PAPER: [Lightweight error mitigation strategies for post-training N:M activation sparsity in LLMs](https://arxiv.org/abs/2509.22166)
+
 # LLM_activation_pruning
 Code for pruning of input activations to speed up of LLMs.
 
